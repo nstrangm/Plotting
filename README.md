@@ -11,12 +11,12 @@ All of the important root includes like TH1.h, TF1.h, TGraph.h and many more are
 1. Initialize the class you want to use. This could be Plotting1D, Plotting2D, PlottingRatio or PlottingPaint: `Plotting1D PExample`  
 2. Add all the histograms and graphs you want to include in the plot and select the plotting options: `PExample.NewHist(ptr_to_hist,"Legend entry",20,2,kBlack,"p")`  
 3. Choose other options like margins and axis ranges  
-4. Export the plot: `PExample->Plot("Example.pdf")`  
+4. Export the plot: `PExample.Plot("Example.pdf")`  
 
 ###### Simple example for a given pointer to a histogram h  
 ```
 Plotting1D PExample;  
-PExample->NewHist(h);  
-PExample->Plot("Example");  
+PExample.NewHist(h);  
+PExample.Plot("Example");  
 ```
 Yes. It's that easy.  
