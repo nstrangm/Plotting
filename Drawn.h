@@ -14,6 +14,7 @@
 #include "TGraphErrors.h"
 #include "TCanvas.h"
 #include "TLegend.h"
+#include "TObjString.h"
 #include "TLatex.h"
 #include "TString.h"
 #include "TStyle.h"
@@ -27,14 +28,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <boost/tokenizer.hpp>
 
 using std::cout;  //  Now the std:: in std::cout can be omitted
 using std::cerr;  //  Preferably use cerr since cout is not always printed exactly where called
 using std::endl;
-
-using boost::char_separator;
-using boost::tokenizer;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //++++++++++++++++++++++++++++++++++ Plotting ++++++++++++++++++++++++++++++++++
@@ -55,7 +52,7 @@ class Plotting{
     void SetAxisRange(Double_t xlow=42, Double_t xup=42, Double_t ylow=42, Double_t yup=42, Double_t zlow = 0, Double_t zup = 2);
 
     //  Adds a string to vector Latex that will be drawn on canvas in function Plot(). Position in relative coordinates. Use ; to split string into seperate lines.
-    void DrawLatex(const Double_t  PositX = 0.2, const Double_t  PositY = 0.2, std::string text = "", const Double_t TextSize = 0.035, const Double_t dDist = 0.05, const Int_t font = 42, const Int_t color = kBlack );
+    void DrawLatex(const Double_t  PositX = 0.2, const Double_t  PositY = 0.2, TString text = "", const Double_t TextSize = 0.035, const Double_t dDist = 0.05, const Int_t font = 42, const Int_t color = kBlack );
 
     //  Adds a line to vector lines that will be drawn on canvas in function Plot(). The lines coordinates relate to the axis. When setting negative style a curly line will be drawn instead of the straight one.
     void NewLine(Double_t x1 = 0, Double_t y1 = 0, Double_t x2 = 1, Double_t y2 = 1, Int_t style = 1, Int_t color = kBlack, Int_t width = 1, TString label = "");
@@ -74,12 +71,17 @@ class Plotting{
     //  Vectors of elements that are added by New... functions and are drawn in the Plot() functions
     std::vector<TH1F*> hists;
     std::vector<TGraph*> graphs;
+    std::vector<TF1*> funcs;
     std::vector<TLine*> lines;
     std::vector<TCurlyLine*> clines;
     std::vector<TLatex*> Latex;
 
     std::vector<TString> DrawOption;  //  A histogram is plotted using the corresponding DrawOption ("p","h",..)
     std::vector<TString> LegendLabel; //  Strings corresponding to histograms are added to legend
+    std::vector<TString> LegendLabelF;
+    std::vector<TString> DrawOptionF;
+    std::vector<TString> LegendLabelG;
+    std::vector<TString> DrawOptionG;
     std::vector<TString>  LegendLabelL; //  Strings corresponding to lines are added to legend (if not empty)
 
     //  The following are standard settings that can be changes by calling Set.. functions before Plot()
@@ -169,7 +171,7 @@ void Plotting::AutoSetAxisRanges(Bool_t logy){
 
     //  Leave space between highest/lowest bin and the axis borders so you can see every bin
     max = logy ? 2*max : max+(max-min)/10;  //  With log scales a factor 2 isn't too much
-    min = logy ? 0.5*min : (max - 2*min > 0 ? 0 : min-(max-min)/8); //  max-2*min>0 ? min is small->go down to 0 : all bins rather full
+    min = logy ? 0.5*min : (max - 2*min > 0 ? (min > 0 ? 0 : 1.1*min) : min-(max-min)/8); //  max-2*min>0 ? min is small->go down to 0 : all bins rather full
 
     //  If the respective range was set to 42 use the just calculated estimates
     if (AxisRange[1][0] > 41.99 && AxisRange[1][0] < 42.01) AxisRange[1][0] = min;
@@ -200,14 +202,17 @@ void Plotting::AutoSetAxisRanges(Bool_t logy){
       AxisRange[0][1] = hAxisFromGraph->GetBinLowEdge(hAxisFromGraph->GetNbinsX())+hAxisFromGraph->GetBinWidth(hAxisFromGraph->GetNbinsX());
     }
   }
+  else if(funcs.size() > 0){ cout << "Warning: Only functions have been inserted..." << endl; }
   else Abort("No histogram or graph given.");
 }
 
-void Plotting::DrawLatex(const Double_t  PositX, const Double_t  PositY, std::string text, const Double_t TextSize, const Double_t dDist, const Int_t font, const Int_t color){
+void Plotting::DrawLatex(const Double_t  PositX, const Double_t  PositY, TString text, const Double_t TextSize, const Double_t dDist, const Int_t font, const Int_t color){
   std::vector<TString> LatStr;  //  Each element corresponds to a line of the printed latex string
-  char_separator<char> sep(";");  //  The semicolon seperates the string into different lines
-  tokenizer<char_separator<char>> tokens(text, sep);
-  for (const auto& t : tokens) LatStr.push_back(t); //  Trivial.
+  TObjArray *textStr = text.Tokenize(";");  //  The semicolon seperates the string into different lines
+  for(Int_t i = 0; i<textStr->GetEntries() ; i++){
+     TObjString* tempObj     = (TObjString*) textStr->At(i);
+     LatStr.push_back( tempObj->GetString());
+   }
 
   //  Loop thru the latex lines and set the formatting
   for( Int_t i = 0; i < (Int_t)LatStr.size(); ++i){
@@ -286,13 +291,6 @@ class Plotting1D : public Plotting{
 
   private:
 
-    //  Declare some vectors for storing funcs and graphs and their options here, since they are 1D specific
-    std::vector<TF1*> funcs;
-    std::vector<TString> LegendLabelF;
-    std::vector<TString> DrawOptionF;
-    std::vector<TString> LegendLabelG;
-    std::vector<TString> DrawOptionG;
-
     //  Create the canvas using the standard dimensions and margins, if they were not set by SetMargins
     void InitializeCanvas(Bool_t logx, Bool_t logy);
 
@@ -311,7 +309,7 @@ Plotting1D::~Plotting1D(){
 
 void Plotting1D::Plot(TString name, Bool_t logx, Bool_t logy){
 
-  if(hists.size() < 1 && graphs.size() < 1) Abort("No hists added for plotting.");
+  if(hists.size() < 1 && graphs.size() < 1 && funcs.size() < 1) Abort("No hists added for plotting.");
 
   InitializeCanvas(logx, logy); //  Creating Canvas with margins
   InitializeAxis(logy); //  Create the hDummy and set its axis label + ranges
@@ -483,6 +481,9 @@ class Plotting2D : public Plotting{
     void NewHist(TH2F* h = nullptr, TString opt = "COLZ", Int_t palette = kBird);
     void NewHist(TH2D* h = nullptr, TString opt = "COLZ", Int_t palette = kBird);  //  Convert to TH2F and call that NewHist function
 
+    //  Add a new function to the funcs vector that will be drawn when calling Plot()
+    void NewFunc(TF1* f = nullptr, TString label = "", Int_t style = -1, Int_t size = 1, Int_t color = -1, TString opt = "l");
+
     void SetAxisLabel(TString labelx = "", TString labely = "", Double_t offsetx = 1., Double_t offsety = 1.);
 
   protected:
@@ -509,13 +510,21 @@ void Plotting2D::Plot(TString name, Bool_t logx, Bool_t logy, Bool_t logz, Int_t
 
   InitializeCanvas(logx, logy, logz); //Creating Canvas with margins
   InitializeAxis();
+  InitializeLegend();
   gStyle->SetNumberContours(numcontours);
 
   hist->Draw(Form("same,%s", ((TString) DrawOption.at(0)).Data()));
 
+  for( Int_t i = 0; i < (Int_t)funcs.size(); ++i){
+    funcs.at(i)->Draw(Form("same %s", ((TString) DrawOptionF.at(i)).Data()));
+    if ((Int_t)*(LegendLabelF.at(i).Data())) leg->AddEntry(funcs.at(i), LegendLabelF.at(i).Data(), (DrawOptionF.at(i).Contains("l") || DrawOptionF.at(i).Contains("hist") || DrawOptionF.at(i).Contains("C") ) ? "l" : "p");
+  } //  Dont add anything to the legend if LegendLabelF is empty
+
   for( Int_t i = 0; i < (Int_t)Latex.size(); ++i) Latex.at(i)->Draw("same");
 
   for( Int_t i = 0; i < (Int_t)lines.size(); ++i) lines.at(i)->Draw("same");
+
+  leg->Draw("same");
 
   Canvas->SaveAs(name);
   delete Canvas;
@@ -531,6 +540,24 @@ void Plotting2D::NewHist(TH2F* h, TString opt, Int_t palette){
 void Plotting2D::NewHist(TH2D* h, TString opt, Int_t palette){
   TH2F* hd = (TH2F*)h;
   NewHist(hd, opt,palette);
+}
+
+void Plotting2D::NewFunc(TF1* f, TString label, Int_t style, Int_t size, Int_t color, TString opt){
+
+  if(!f) Abort("NewFunc was given a Nullptr.");
+
+  funcs.push_back(f);
+  LegendLabelF.push_back(label);
+  DrawOptionF.push_back(opt);
+
+  f->SetMarkerStyle(( style == -1) ? AutoStyle[counter] : style);
+  f->SetLineStyle(( style == -1) ? AutoStyleLine[counter] : style);
+  f->SetMarkerColor(( color == -1) ? AutoColor[counter] : color);
+  f->SetLineColor(( color == -1) ? AutoColor[counter] : color);
+  f->SetMarkerSize(size);
+  f->SetLineWidth(size);
+
+  counter++;
 }
 
 void Plotting2D::InitializeCanvas(Bool_t logx, Bool_t logy, Bool_t logz){
@@ -988,48 +1015,6 @@ void PlottingPaint::InitializeCanvas(){
 
   Canvas = new TCanvas("Canvas", "Canvas", CanvasDimensions[0], CanvasDimensions[1]);
   Canvas->cd();
-}
-
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//+++++++++++++++++++++++++++++++++++ Extras +++++++++++++++++++++++++++++++++++
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-//  This function can be used to draw Latex without using the rest of the macro
-void DrawFreeLatex(const Double_t  PositX = 0.2, const Double_t  PositY = 0.2, std::string text = "", const Double_t TextSize = 0.035, const Double_t dDist = 0.05, const Int_t font = 42, const Int_t color = kBlack ){
-  std::vector<TString> LatStr;
-  std::vector<TLatex*> Latex;
-  char_separator<char> sep(";");
-  tokenizer<char_separator<char>> tokens(text, sep);
-  for (const auto& t : tokens) {
-      LatStr.push_back(t);
-  }
-
-  for( Int_t i = 0; i < (Int_t)LatStr.size(); ++i){
-    Latex.push_back( new TLatex(PositX, PositY - i*dDist, LatStr[i]));
-    Latex.at(Latex.size() - 1)->SetNDC();
-    Latex.at(Latex.size() - 1)->SetTextFont(font);
-    Latex.at(Latex.size() - 1)->SetTextColor(color);
-    Latex.at(Latex.size() - 1)->SetTextSize(TextSize);
-  }
-  for(  Int_t i = 0; i < (Int_t)Latex.size(); ++i){
-    Latex.at(i)->Draw("same");
-  }
-}
-
-void printProgress (Double_t progress)
-{
-  Int_t barWidth = 100;
-  static Int_t pos = barWidth * progress;
-  if((Int_t)(barWidth*progress) > pos){
-    pos = barWidth * progress;
-    cerr.flush();
-    cerr << "["<< Int_t(progress * 100.0) << "%]" << "[";
-    for (Int_t i = 0; i < barWidth; ++i) {
-        if (i < pos) cerr << "|";
-        else cerr << " ";
-    }
-    cerr << "]\r";
-  }
 }
 
 #endif
